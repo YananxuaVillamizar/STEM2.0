@@ -6,7 +6,7 @@
 
 const int PIN_SERVO = 23;
 
-// Tu frente real exacto (centro de referencia)
+// Tu centro real exacto calibrado (Frente = 85°)
 const int POS_FRENTE    = 85; 
 const int POS_DERECHA   = 30;  // 85 - 55 grados
 const int POS_IZQUIERDA = 140; // 85 + 55 grados
@@ -23,25 +23,31 @@ inline void moverSuave(int anguloDestino) {
   while (anguloActual != anguloDestino) {
     anguloActual += paso;
     servoSensor.write(anguloActual);
-    delay(15); // Movimiento gradual grado a grado
+    delay(12); // Movimiento gradual grado a grado para limitar corriente
   }
   
-  delay(150); // Asentamiento mecánico
+  delay(120); // Asentamiento mecánico
 }
 
 inline void iniciarServo() {
+  // Asignar todos los temporizadores para que ESP32Servo tome uno libre sin chocar con los motores
   ESP32PWM::allocateTimer(0);
+  ESP32PWM::allocateTimer(1);
+  ESP32PWM::allocateTimer(2);
+  ESP32PWM::allocateTimer(3);
+  
   servoSensor.setPeriodHertz(50);
 
-  // Vincular pin al temporizador
-  servoSensor.attach(PIN_SERVO, 1000, 2000);
-
-  // Escribir de inmediato el pulso de 85 grados
+  // Pre-cargar el ángulo objetivo antes de enganchar el pin
   anguloActual = POS_FRENTE;
   servoSensor.write(POS_FRENTE);
-  
-  // Tiempo de estabilización mecánica y eléctrica inicial
-  delay(1000);
+
+  // Vincular pin
+  servoSensor.attach(PIN_SERVO, 1000, 2000);
+
+  // Reafirmar posición central al frente
+  servoSensor.write(POS_FRENTE);
+  delay(800); // Espera a que el mecanismo se alinee al frente
 }
 
 inline void mirarCentro() {

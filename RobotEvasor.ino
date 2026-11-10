@@ -6,39 +6,43 @@
 #include "ServoCabezal.h"
 
 const float DISTANCIA_SEGURA = 25.0; // cm
+bool enMarcha = false;
 
 void setup() {
-  // Desactivar detector de brownout por software
+  // Desactivar detección interna de brownout
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
 
-  iniciarMotores();
   iniciarUltrasonido();
 
-  // 1. Iniciar y posicionar servo al centro (85°)
+  // 1. Iniciar servo PRIMERO para evitar conflictos de timers
   iniciarServo();
 
-  // 2. Tiempo muerto obligatorio de 1 s con servo quieto antes de mover motores
-  delay(1000);
+  // 2. Iniciar etapa de motores (en estado frenado)
+  iniciarMotores();
+
+  // 3. Pausa crucial: estabilización eléctrica completa de la celda antes de mover nada
+  delay(1500);
 }
 
 void loop() {
   float distanciaFrente = medirDistancia();
 
   if (distanciaFrente > DISTANCIA_SEGURA) {
-    avanzar();
-    delay(50);
+    // Si no estaba avanzando, arrancar con rampa suave
+    if (!enMarcha) {
+      avanzarSuave();
+      enMarcha = true;
+    }
+    delay(40); // Avance continuo sin sobrecargar el procesador
   } else {
-    // --- FASE 1: FRENAR TRACCIÓN ---
-    frenar();
-    delay(1000); // 1 s de reposo para recuperar voltaje en la celda
+    // --- OBSTÁCULO DETECTADO ---
 
-    // --- FASE 2: MANIOBRA DE DESPEJE ---
-    retroceder();
-    delay(200);
+    // FASE 1: Detener tracción al 100%
     frenar();
-    delay(1000); // 1 s obligatorio antes de encender el servo
+    enMarcha = false;
+    delay(800); // 800 ms de reposo para recuperar el voltaje de la batería
 
-    // --- FASE 3: ESCANEO LATERAL (MOTORES APAGADOS) ---
+    // FASE 2: Escaneo angular (MOTORES TOTALMENTE APAGADOS)
     mirarDerecha();
     delay(200);
     float distDerecha = medirDistancia();
@@ -48,25 +52,26 @@ void loop() {
     float distIzquierda = medirDistancia();
 
     mirarCentro();
-    
-    // --- FASE 4: TRANSICIÓN SERVO -> MOTORES ---
-    // 1 s obligatorio tras terminar el escaneo antes de mover las ruedas
-    delay(1000); 
+    delay(200);
 
-    // --- FASE 5: GIRO DEL CHASIS (SERVO INMÓVIL AL FRENTE) ---
+    // FASE 3: Reposo post-servo antes de pedir corriente a los motores
+    delay(800);
+
+    // FASE 4: Giro del chasis hacia el lado más despejado (SERVO QUIETO AL FRENTE)
     if (distDerecha >= distIzquierda && distDerecha > DISTANCIA_SEGURA) {
       girarDerecha();
-      delay(380);
+      delay(420); // Ajustar duración según agarre
     } else if (distIzquierda > distDerecha && distIzquierda > DISTANCIA_SEGURA) {
       girarIzquierda();
-      delay(380);
+      delay(420);
     } else {
+      // Encajonado: rotación amplia
       girarDerecha();
-      delay(750);
+      delay(800);
     }
 
-    // Frenar y esperar 1 s antes de retornar a la marcha normal
+    // FASE 5: Frenar y estabilizar antes de evaluar de nuevo la marcha recta
     frenar();
-    delay(1000);
+    delay(800);
   }
 }
