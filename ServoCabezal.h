@@ -6,16 +6,17 @@
 
 const int PIN_SERVO = 23;
 
-// Tu centro real exacto calibrado (Frente = 85°)
+// Tu frente real calibrado (centro)
 const int POS_FRENTE    = 85; 
-const int POS_DERECHA   = 30;  // 85 - 55 grados
-const int POS_IZQUIERDA = 140; // 85 + 55 grados
+// Arco ampliado para mayor campo de visión
+const int POS_DERECHA   = 20;  // 85 - 65 grados (visión lateral derecha amplia)
+const int POS_IZQUIERDA = 150; // 85 + 65 grados (visión lateral izquierda amplia)
 
 static Servo servoSensor;
 static int anguloActual = POS_FRENTE;
 
 inline void moverSuave(int anguloDestino) {
-  anguloDestino = constrain(anguloDestino, 20, 160);
+  anguloDestino = constrain(anguloDestino, 15, 165);
   if (anguloDestino == anguloActual) return;
 
   int paso = (anguloDestino > anguloActual) ? 1 : -1;
@@ -23,14 +24,13 @@ inline void moverSuave(int anguloDestino) {
   while (anguloActual != anguloDestino) {
     anguloActual += paso;
     servoSensor.write(anguloActual);
-    delay(12); // Movimiento gradual grado a grado para limitar corriente
+    delay(14); // 14 ms por grado: movimiento continuo sin sobrecorrientes
   }
   
-  delay(120); // Asentamiento mecánico
+  delay(150); // Asentamiento mecánico
 }
 
 inline void iniciarServo() {
-  // Asignar todos los temporizadores para que ESP32Servo tome uno libre sin chocar con los motores
   ESP32PWM::allocateTimer(0);
   ESP32PWM::allocateTimer(1);
   ESP32PWM::allocateTimer(2);
@@ -38,16 +38,13 @@ inline void iniciarServo() {
   
   servoSensor.setPeriodHertz(50);
 
-  // Pre-cargar el ángulo objetivo antes de enganchar el pin
+  // Forzar que el canal inicie directamente en el frente calibrado
   anguloActual = POS_FRENTE;
   servoSensor.write(POS_FRENTE);
-
-  // Vincular pin
   servoSensor.attach(PIN_SERVO, 1000, 2000);
-
-  // Reafirmar posición central al frente
   servoSensor.write(POS_FRENTE);
-  delay(800); // Espera a que el mecanismo se alinee al frente
+  
+  delay(800); // Estabilización
 }
 
 inline void mirarCentro() {
