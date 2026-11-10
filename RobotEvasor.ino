@@ -5,10 +5,10 @@
 #include "SensorUltrasonido.h"
 #include "ServoCabezal.h"
 
-const float DISTANCIA_SEGURA = 25.0; // cm
+// Umbral ampliado: previene choques en los extremos de las ruedas
+const float DISTANCIA_SEGURA = 32.0; // cm
 
 bool enMarcha = false;
-unsigned long tiempoInicioAvance = 0;
 float distanciaAnterior = 100.0;
 unsigned long ultimoChequeoBloqueo = 0;
 
@@ -16,14 +16,10 @@ void setup() {
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
 
   iniciarUltrasonido();
-
-  // 1. Iniciar servo primero para no colisionar con PWM de motores
   iniciarServo();
-
-  // 2. Iniciar etapa de motores (en reposo)
   iniciarMotores();
 
-  // 3. Estabilización completa de la batería de 1 celda
+  // Pausa de estabilización inicial
   delay(1200);
 }
 
@@ -31,25 +27,23 @@ void loop() {
   float distanciaFrente = medirDistancia();
 
   // ========================================================
-  // 1. DETECCIÓN DE ATASCAMIENTO O RUEDAS TRABADAS
+  // 1. CONTROL DE TRABAMIENTO (RUEDA LOCA O PISO IRREGULAR)
   // ========================================================
   if (enMarcha) {
-    // Cada 1200 ms revisamos si el robot realmente se ha desplazado
-    if (millis() - ultimoChequeoBloqueo >= 1200) {
-      // Si la distancia sigue siendo prácticamente la misma (menos de 2 cm de variación)
-      // y estamos a menos de 70 cm de una pared o referencia, estamos atascados
-      if (abs(distanciaFrente - distanciaAnterior) < 2.0 && distanciaFrente < 70.0) {
+    if (millis() - ultimoChequeoBloqueo >= 1000) {
+      // Si la distancia frontal no cambia y hay una pared a menos de 75 cm, está patinando/atascado
+      if (abs(distanciaFrente - distanciaAnterior) < 2.0 && distanciaFrente < 75.0) {
         frenar();
         enMarcha = false;
-        delay(800); // Reposo para que la celda se recupere
+        delay(800);
         
-        // Ejecutar rutina de desenganche físico
-        sacudidaEscape();
+        // Ejecutar rutina de pivote para destrabar la rueda loca
+        desatorarRuedaLoca();
         delay(800);
         
         distanciaAnterior = medirDistancia();
         ultimoChequeoBloqueo = millis();
-        return; // Salir de esta iteración para reevaluar entorno
+        return;
       }
       distanciaAnterior = distanciaFrente;
       ultimoChequeoBloqueo = millis();
@@ -57,28 +51,29 @@ void loop() {
   }
 
   // ========================================================
-  // 2. LÓGICA DE NAVEGACIÓN Y EVASIÓN
+  // 2. CICLO NORMAL DE NAVEGACIÓN
   // ========================================================
   if (distanciaFrente > DISTANCIA_SEGURA) {
     if (!enMarcha) {
       avanzarSuave();
       enMarcha = true;
-      tiempoInicioAvance = millis();
       ultimoChequeoBloqueo = millis();
       distanciaAnterior = distanciaFrente;
     }
     delay(40);
   } else {
-    // --- OBSTÁCULO FRONTAL DETECTADO ---
+    // --- OBSTÁCULO ENCONTRADO ---
+
+    // PASO 1: Frenar en seco inmediatamente
     frenar();
     enMarcha = false;
-    delay(800); // 800 ms de reposo para recuperar la tensión de la 18650
+    delay(800); // Reposo para que la celda se recupere
 
-    // FASE 1: Despeje previo (retroceso corto con torque)
-    retrocederConTorque(280);
-    delay(800); // Reposo post-retroceso
+    // PASO 2: RETROCESO OBLIGATORIO DE DESPEJE (320 ms con torque)
+    retrocederConTorque(320);
+    delay(800); // 800 ms con motores en 0V antes de activar el servo
 
-    // FASE 2: Escaneo angular amplio (MOTORES 100% INACTIVOS)
+    // PASO 3: ESCANEO LATERAL AMPLIO (MOTORES COMPLETAMENTE APAGADOS)
     mirarDerecha();
     delay(250);
     float distDerecha = medirDistancia();
@@ -90,20 +85,20 @@ void loop() {
     mirarCentro();
     delay(200);
 
-    // FASE 3: Tiempo muerto obligatorio entre servo y motores
+    // PASO 4: Tiempo muerto obligatorio entre servo y motores
     delay(800);
 
-    // FASE 4: Giro del chasis hacia el sector con mayor distancia
+    // PASO 5: GIRO CON ESPACIO DESPEJADO TRAS EL RETROCESO
     if (distDerecha >= distIzquierda && distDerecha > DISTANCIA_SEGURA) {
-      girarDerecha(420);
+      girarDerecha(450);
     } else if (distIzquierda > distDerecha && distIzquierda > DISTANCIA_SEGURA) {
-      girarIzquierda(420);
+      girarIzquierda(450);
     } else {
-      // Encajonado o pared continua: giro amplio de escape
-      girarDerecha(780);
+      // Si ambos lados están comprometidos: giro de escape
+      girarDerecha(850);
     }
 
-    // FASE 5: Pausa de estabilización previa a reanudar marcha
+    // PASO 6: Reposo final antes de volver a evaluar el avance
     delay(800);
   }
 }

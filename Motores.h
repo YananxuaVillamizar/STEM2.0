@@ -12,11 +12,10 @@ const int PIN_EN2 = 25;
 const int PIN_IN3 = 33;
 const int PIN_IN4 = 32;
 
-// Velocidad de crucero controlada
-const int VELOCIDAD_CRUCERO = 160; 
-const int VELOCIDAD_GIRO    = 155; 
-// Pulso con algo más de fuerza para desatascar las ruedas
-const int VELOCIDAD_RESCATE = 175;
+// Velocidades calibradas para la celda 18650
+const int VELOCIDAD_CRUCERO = 165; 
+const int VELOCIDAD_GIRO    = 160; 
+const int VELOCIDAD_RESCATE = 180;
 
 inline void frenar() {
   analogWrite(PIN_EN1, 0);
@@ -43,21 +42,21 @@ inline void avanzarSuave() {
   digitalWrite(PIN_IN3, HIGH);
   digitalWrite(PIN_IN4, LOW);
 
-  // Rampa de aceleración con piso en 90 para romper la fricción del piso
-  for (int v = 90; v <= VELOCIDAD_CRUCERO; v += 15) {
+  // Rampa de aceleración para no tirar abajo el voltaje de la batería
+  for (int v = 95; v <= VELOCIDAD_CRUCERO; v += 15) {
     analogWrite(PIN_EN1, v);
     analogWrite(PIN_EN2, v);
-    delay(12);
+    delay(10);
   }
 }
 
+// Retroceso con suficiente fuerza para librar obstáculos
 inline void retrocederConTorque(int duracionMs) {
   digitalWrite(PIN_IN1, LOW);
   digitalWrite(PIN_IN2, HIGH);
   digitalWrite(PIN_IN3, LOW);
   digitalWrite(PIN_IN4, HIGH);
 
-  // Se arranca con un pequeño escalón para liberar la rueda loca
   analogWrite(PIN_EN1, VELOCIDAD_RESCATE);
   delay(15);
   analogWrite(PIN_EN2, VELOCIDAD_RESCATE);
@@ -91,13 +90,17 @@ inline void girarIzquierda(int duracionMs) {
   frenar();
 }
 
-// Rutina de sacudón para liberar ruedas trabadas
-inline void sacudidaEscape() {
+// Maniobra oscilatoria para obligar a la rueda loca a alinearse
+inline void desatorarRuedaLoca() {
+  // Sacudón en pivote a la derecha
+  girarDerecha(180);
+  delay(150);
+  // Sacudón en pivote a la izquierda (la rueda loca pivota y se orienta)
+  girarIzquierda(220);
+  delay(150);
+  // Retroceso firme una vez orientada la rueda loca
   retrocederConTorque(350);
-  delay(200);
-  girarDerecha(250);
-  delay(200);
-  girarIzquierda(250);
+  delay(150);
   frenar();
 }
 

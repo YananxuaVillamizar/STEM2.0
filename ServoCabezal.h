@@ -6,17 +6,17 @@
 
 const int PIN_SERVO = 23;
 
-// Tu frente real calibrado (centro)
+// Tu frente real exacto
 const int POS_FRENTE    = 85; 
-// Arco ampliado para mayor campo de visión
-const int POS_DERECHA   = 20;  // 85 - 65 grados (visión lateral derecha amplia)
-const int POS_IZQUIERDA = 150; // 85 + 65 grados (visión lateral izquierda amplia)
+// Cobertura angular abierta para proteger las llantas en esquinas
+const int POS_DERECHA   = 15;  // 85 - 70 grados (visión total hacia la llanta derecha)
+const int POS_IZQUIERDA = 155; // 85 + 70 grados (visión total hacia la llanta izquierda)
 
 static Servo servoSensor;
 static int anguloActual = POS_FRENTE;
 
 inline void moverSuave(int anguloDestino) {
-  anguloDestino = constrain(anguloDestino, 15, 165);
+  anguloDestino = constrain(anguloDestino, 10, 170);
   if (anguloDestino == anguloActual) return;
 
   int paso = (anguloDestino > anguloActual) ? 1 : -1;
@@ -24,10 +24,10 @@ inline void moverSuave(int anguloDestino) {
   while (anguloActual != anguloDestino) {
     anguloActual += paso;
     servoSensor.write(anguloActual);
-    delay(14); // 14 ms por grado: movimiento continuo sin sobrecorrientes
+    delay(12); // Movimiento suave
   }
   
-  delay(150); // Asentamiento mecánico
+  delay(120); // Asentamiento
 }
 
 inline void iniciarServo() {
@@ -38,13 +38,13 @@ inline void iniciarServo() {
   
   servoSensor.setPeriodHertz(50);
 
-  // Forzar que el canal inicie directamente en el frente calibrado
+  // Inicializar en 85° sin latigazo previo
   anguloActual = POS_FRENTE;
   servoSensor.write(POS_FRENTE);
   servoSensor.attach(PIN_SERVO, 1000, 2000);
   servoSensor.write(POS_FRENTE);
   
-  delay(800); // Estabilización
+  delay(800);
 }
 
 inline void mirarCentro() {
