@@ -5,11 +5,14 @@
 #include "SensorUltrasonido.h"
 #include "ServoCabezal.h"
 
-const float DISTANCIA_SEGURA = 30.0; // cm
+// Umbral preventivo ampliado contra rebotes oblicuos y choques en diagonal
+const float DISTANCIA_SEGURA = 35.0; // cm
+const float DISTANCIA_CALLEJON = 45.0; // cm para espacios de 3 paredes más anchos
 
 bool enMarcha = false;
 float distanciaAnterior = 100.0;
 unsigned long ultimoChequeoBloqueo = 0;
+unsigned long inicioAvanceContinuo = 0;
 
 unsigned long tiempoUltimaEvasion = 0;
 int deteccionesConsecutivas = 0;
@@ -28,23 +31,29 @@ void loop() {
   float distanciaFrente = medirDistancia();
 
   // ========================================================
-  // 1. DETECCIÓN DE PATINAJE / ATASCAMIENTO FÍSICO
+  // 1. PROTECCIÓN ANTI-STALL Y CONTROL DE SUELO TRABADO
   // ========================================================
   if (enMarcha) {
-    if (millis() - ultimoChequeoBloqueo >= 1400) {
-      // Solo consideramos atascamiento si estamos frente a una pared cercana (< 50 cm)
-      // y la distancia prácticamente no cambió en 1.4 segundos
-      if (abs(distanciaFrente - distanciaAnterior) < 1.5 && distanciaFrente < 50.0) {
+    // Si lleva más de 1.8 s avanzando sin interrupción frente a un obstáculo
+    // o la distancia no disminuye, cortamos potencia para evitar pico de corriente
+    if (millis() - ultimoChequeoBloqueo >= 1000) {
+      bool distanciaInvariable = (abs(distanciaFrente - distanciaAnterior) < 2.5);
+      bool cercaObstaculo = (distanciaFrente < 60.0);
+      bool tiempoExcedido = (millis() - inicioAvanceContinuo > 2500 && distanciaFrente < 80.0);
+
+      if ((distanciaInvariable && cercaObstaculo) || tiempoExcedido) {
+        // CORTE DE SEGURIDAD INMEDIATO
         frenar();
         enMarcha = false;
-        delay(600);
+        delay(600); // Reposo para recuperar la celda
         
+        // Destrabar mecánicamente la rueda loca con sacudón en pivote
         desatorarRuedaLoca();
         delay(600);
         
         distanciaAnterior = medirDistancia();
         ultimoChequeoBloqueo = millis();
-        return;
+        return; // Salir sin escanear para no agotar la batería innecesariamente
       }
       distanciaAnterior = distanciaFrente;
       ultimoChequeoBloqueo = millis();
@@ -52,69 +61,71 @@ void loop() {
   }
 
   // ========================================================
-  // 2. CICLO NORMAL DE NAVEGACIÓN
+  // 2. NAVEGACIÓN Y EVASIÓN
   // ========================================================
   if (distanciaFrente > DISTANCIA_SEGURA) {
     if (!enMarcha) {
       avanzarSuave();
       enMarcha = true;
+      inicioAvanceContinuo = millis();
       ultimoChequeoBloqueo = millis();
       distanciaAnterior = distanciaFrente;
     }
-    delay(40);
+    delay(35);
   } else {
-    // --- OBSTÁCULO FRONTAL DETECTADO ---
+    // --- OBSTÁCULO DETECTADO ---
 
-    // Detección de callejones cerrados
-    if (millis() - tiempoUltimaEvasion < 2200) {
+    // Memoria de callejón: evaluar si cayó en 2 obstáculos en menos de 2.5 s
+    if (millis() - tiempoUltimaEvasion < 2500) {
       deteccionesConsecutivas++;
     } else {
       deteccionesConsecutivas = 1;
     }
     tiempoUltimaEvasion = millis();
 
-    // FASE 1: Detención y retroceso de despeje
+    // FASE 1: Frenar y retroceso de despeje
     frenar();
     enMarcha = false;
-    delay(600); // Reposo
+    delay(600); // 600 ms de reposo en 0V
 
-    retrocederConTorque(280);
-    delay(600); // Motores en 0V
+    retrocederConTorque(320);
+    delay(600); // Desacoplo de motores antes del servo
 
-    // FASE 2: Escape de 180° si ya encontró 2 paredes seguidas
+    // FASE 2: Escape de 180° si ya chocó con 2 paredes consecutivas
     if (deteccionesConsecutivas >= 2) {
-      girarDerecha(650); // 650 ms calibrados a 4.0V para 180° reales
+      girarDerecha(680); // Giro de 180° limpio a 4.0V
       deteccionesConsecutivas = 0;
       delay(600);
       return;
     }
 
-    // FASE 3: Escaneo lateral amplio (0° y 175°)
+    // FASE 3: Escaneo lateral angular rápido (0° y 175°)
     mirarDerecha();
-    delay(120);
+    delay(100);
     float distDerecha = medirDistancia();
 
     mirarIzquierda();
-    delay(120);
+    delay(100);
     float distIzquierda = medirDistancia();
 
     mirarCentro();
-    delay(100);
+    delay(90);
 
     // FASE 4: Reposo obligatorio post-servo
     delay(600);
 
-    // FASE 5: Decisión de giro (400 ms ≈ 90° con batería cargada)
-    if (distDerecha <= DISTANCIA_SEGURA && distIzquierda <= DISTANCIA_SEGURA) {
-      girarDerecha(650); // 180° de escape
+    // FASE 5: Decisión de giro con rango de callejón ampliado
+    // Si ambos lados están por debajo de 45 cm, estamos en un espacio cerrado de 3 paredes
+    if (distDerecha <= DISTANCIA_CALLEJON && distIzquierda <= DISTANCIA_CALLEJON) {
+      girarDerecha(680); // Giro de 180° obligatorio para salir del fondo
       deteccionesConsecutivas = 0;
     } else if (distDerecha >= distIzquierda) {
-      girarDerecha(380);  // 90° a la derecha
+      girarDerecha(380);  // 90° derecha
     } else {
-      girarIzquierda(380); // 90° a la izquierda
+      girarIzquierda(380); // 90° izquierda
     }
 
-    // FASE 6: Reposo antes de reanudar marcha
+    // FASE 6: Pausa previa a la reanudación
     frenar();
     delay(600);
   }

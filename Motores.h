@@ -12,16 +12,16 @@ const int PIN_EN2 = 25;
 const int PIN_IN3 = 33;
 const int PIN_IN4 = 32;
 
-// Velocidades de operación
+// Velocidades balanceadas
 const int VELOCIDAD_CRUCERO = 160; 
 const int VELOCIDAD_GIRO    = 155; 
-const int VELOCIDAD_RESCATE = 180;
+const int VELOCIDAD_RESCATE = 185;
 
 // ============================================================================
-// CORRECCIÓN DE TRAYECTORIA
-// Si vira a la DERECHA: bajamos TRIM_IZQ para que el izquierdo no empuje de más
+// COMPENSACIÓN DE LÍNEA RECTA
+// Con 0.90 se iba a la izquierda. Nivelamos con 0.96 para trayectoria recta
 // ============================================================================
-const float TRIM_IZQ = 0.90; // Reducido para evitar el desvío a la derecha
+const float TRIM_IZQ = 0.96; 
 const float TRIM_DER = 1.00;
 
 inline void frenar() {
@@ -52,7 +52,7 @@ inline void avanzarSuave() {
   int targetIzq = (int)(VELOCIDAD_CRUCERO * TRIM_IZQ);
   int targetDer = (int)(VELOCIDAD_CRUCERO * TRIM_DER);
 
-  for (int v = 90; v <= VELOCIDAD_CRUCERO; v += 25) {
+  for (int v = 95; v <= VELOCIDAD_CRUCERO; v += 20) {
     analogWrite(PIN_EN1, (int)(v * TRIM_IZQ));
     analogWrite(PIN_EN2, (int)(v * TRIM_DER));
     delay(8);
@@ -62,6 +62,9 @@ inline void avanzarSuave() {
 }
 
 inline void retrocederConTorque(int duracionMs) {
+  // Limitar duración máxima para proteger la celda de sobrecorriente
+  duracionMs = min(duracionMs, 500);
+
   digitalWrite(PIN_IN1, LOW);
   digitalWrite(PIN_IN2, HIGH);
   digitalWrite(PIN_IN3, LOW);
@@ -100,13 +103,15 @@ inline void girarIzquierda(int duracionMs) {
   frenar();
 }
 
+// Maniobra física de destrabe rápido (sin mover el servo)
 inline void desatorarRuedaLoca() {
-  girarDerecha(160);
-  delay(100);
-  girarIzquierda(200);
-  delay(100);
-  retrocederConTorque(300);
-  delay(100);
+  // Sacudón diferencial en pivote para reorientar la rueda loca en el suelo
+  girarDerecha(180);
+  delay(120);
+  girarIzquierda(220);
+  delay(120);
+  retrocederConTorque(280);
+  delay(120);
   frenar();
 }
 
