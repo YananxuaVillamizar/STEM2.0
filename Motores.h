@@ -12,10 +12,17 @@ const int PIN_EN2 = 25;
 const int PIN_IN3 = 33;
 const int PIN_IN4 = 32;
 
-// Velocidades calibradas para la celda 18650
-const int VELOCIDAD_CRUCERO = 165; 
-const int VELOCIDAD_GIRO    = 160; 
+// Velocidades de operación
+const int VELOCIDAD_CRUCERO = 160; 
+const int VELOCIDAD_GIRO    = 155; 
 const int VELOCIDAD_RESCATE = 180;
+
+// ============================================================================
+// CORRECCIÓN DE TRAYECTORIA
+// Si vira a la DERECHA: bajamos TRIM_IZQ para que el izquierdo no empuje de más
+// ============================================================================
+const float TRIM_IZQ = 0.90; // Reducido para evitar el desvío a la derecha
+const float TRIM_DER = 1.00;
 
 inline void frenar() {
   analogWrite(PIN_EN1, 0);
@@ -42,15 +49,18 @@ inline void avanzarSuave() {
   digitalWrite(PIN_IN3, HIGH);
   digitalWrite(PIN_IN4, LOW);
 
-  // Rampa de aceleración para no tirar abajo el voltaje de la batería
-  for (int v = 95; v <= VELOCIDAD_CRUCERO; v += 15) {
-    analogWrite(PIN_EN1, v);
-    analogWrite(PIN_EN2, v);
-    delay(10);
+  int targetIzq = (int)(VELOCIDAD_CRUCERO * TRIM_IZQ);
+  int targetDer = (int)(VELOCIDAD_CRUCERO * TRIM_DER);
+
+  for (int v = 90; v <= VELOCIDAD_CRUCERO; v += 25) {
+    analogWrite(PIN_EN1, (int)(v * TRIM_IZQ));
+    analogWrite(PIN_EN2, (int)(v * TRIM_DER));
+    delay(8);
   }
+  analogWrite(PIN_EN1, targetIzq);
+  analogWrite(PIN_EN2, targetDer);
 }
 
-// Retroceso con suficiente fuerza para librar obstáculos
 inline void retrocederConTorque(int duracionMs) {
   digitalWrite(PIN_IN1, LOW);
   digitalWrite(PIN_IN2, HIGH);
@@ -90,17 +100,13 @@ inline void girarIzquierda(int duracionMs) {
   frenar();
 }
 
-// Maniobra oscilatoria para obligar a la rueda loca a alinearse
 inline void desatorarRuedaLoca() {
-  // Sacudón en pivote a la derecha
-  girarDerecha(180);
-  delay(150);
-  // Sacudón en pivote a la izquierda (la rueda loca pivota y se orienta)
-  girarIzquierda(220);
-  delay(150);
-  // Retroceso firme una vez orientada la rueda loca
-  retrocederConTorque(350);
-  delay(150);
+  girarDerecha(160);
+  delay(100);
+  girarIzquierda(200);
+  delay(100);
+  retrocederConTorque(300);
+  delay(100);
   frenar();
 }
 

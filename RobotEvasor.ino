@@ -5,12 +5,14 @@
 #include "SensorUltrasonido.h"
 #include "ServoCabezal.h"
 
-// Umbral ampliado: previene choques en los extremos de las ruedas
-const float DISTANCIA_SEGURA = 32.0; // cm
+const float DISTANCIA_SEGURA = 30.0; // cm
 
 bool enMarcha = false;
 float distanciaAnterior = 100.0;
 unsigned long ultimoChequeoBloqueo = 0;
+
+unsigned long tiempoUltimaEvasion = 0;
+int deteccionesConsecutivas = 0;
 
 void setup() {
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
@@ -19,27 +21,26 @@ void setup() {
   iniciarServo();
   iniciarMotores();
 
-  // Pausa de estabilización inicial
-  delay(1200);
+  delay(1000);
 }
 
 void loop() {
   float distanciaFrente = medirDistancia();
 
   // ========================================================
-  // 1. CONTROL DE TRABAMIENTO (RUEDA LOCA O PISO IRREGULAR)
+  // 1. DETECCIÓN DE PATINAJE / ATASCAMIENTO FÍSICO
   // ========================================================
   if (enMarcha) {
-    if (millis() - ultimoChequeoBloqueo >= 1000) {
-      // Si la distancia frontal no cambia y hay una pared a menos de 75 cm, está patinando/atascado
-      if (abs(distanciaFrente - distanciaAnterior) < 2.0 && distanciaFrente < 75.0) {
+    if (millis() - ultimoChequeoBloqueo >= 1400) {
+      // Solo consideramos atascamiento si estamos frente a una pared cercana (< 50 cm)
+      // y la distancia prácticamente no cambió en 1.4 segundos
+      if (abs(distanciaFrente - distanciaAnterior) < 1.5 && distanciaFrente < 50.0) {
         frenar();
         enMarcha = false;
-        delay(800);
+        delay(600);
         
-        // Ejecutar rutina de pivote para destrabar la rueda loca
         desatorarRuedaLoca();
-        delay(800);
+        delay(600);
         
         distanciaAnterior = medirDistancia();
         ultimoChequeoBloqueo = millis();
@@ -62,43 +63,59 @@ void loop() {
     }
     delay(40);
   } else {
-    // --- OBSTÁCULO ENCONTRADO ---
+    // --- OBSTÁCULO FRONTAL DETECTADO ---
 
-    // PASO 1: Frenar en seco inmediatamente
+    // Detección de callejones cerrados
+    if (millis() - tiempoUltimaEvasion < 2200) {
+      deteccionesConsecutivas++;
+    } else {
+      deteccionesConsecutivas = 1;
+    }
+    tiempoUltimaEvasion = millis();
+
+    // FASE 1: Detención y retroceso de despeje
     frenar();
     enMarcha = false;
-    delay(800); // Reposo para que la celda se recupere
+    delay(600); // Reposo
 
-    // PASO 2: RETROCESO OBLIGATORIO DE DESPEJE (320 ms con torque)
-    retrocederConTorque(320);
-    delay(800); // 800 ms con motores en 0V antes de activar el servo
+    retrocederConTorque(280);
+    delay(600); // Motores en 0V
 
-    // PASO 3: ESCANEO LATERAL AMPLIO (MOTORES COMPLETAMENTE APAGADOS)
+    // FASE 2: Escape de 180° si ya encontró 2 paredes seguidas
+    if (deteccionesConsecutivas >= 2) {
+      girarDerecha(650); // 650 ms calibrados a 4.0V para 180° reales
+      deteccionesConsecutivas = 0;
+      delay(600);
+      return;
+    }
+
+    // FASE 3: Escaneo lateral amplio (0° y 175°)
     mirarDerecha();
-    delay(250);
+    delay(120);
     float distDerecha = medirDistancia();
 
     mirarIzquierda();
-    delay(250);
+    delay(120);
     float distIzquierda = medirDistancia();
 
     mirarCentro();
-    delay(200);
+    delay(100);
 
-    // PASO 4: Tiempo muerto obligatorio entre servo y motores
-    delay(800);
+    // FASE 4: Reposo obligatorio post-servo
+    delay(600);
 
-    // PASO 5: GIRO CON ESPACIO DESPEJADO TRAS EL RETROCESO
-    if (distDerecha >= distIzquierda && distDerecha > DISTANCIA_SEGURA) {
-      girarDerecha(450);
-    } else if (distIzquierda > distDerecha && distIzquierda > DISTANCIA_SEGURA) {
-      girarIzquierda(450);
+    // FASE 5: Decisión de giro (400 ms ≈ 90° con batería cargada)
+    if (distDerecha <= DISTANCIA_SEGURA && distIzquierda <= DISTANCIA_SEGURA) {
+      girarDerecha(650); // 180° de escape
+      deteccionesConsecutivas = 0;
+    } else if (distDerecha >= distIzquierda) {
+      girarDerecha(380);  // 90° a la derecha
     } else {
-      // Si ambos lados están comprometidos: giro de escape
-      girarDerecha(850);
+      girarIzquierda(380); // 90° a la izquierda
     }
 
-    // PASO 6: Reposo final antes de volver a evaluar el avance
-    delay(800);
+    // FASE 6: Reposo antes de reanudar marcha
+    frenar();
+    delay(600);
   }
 }

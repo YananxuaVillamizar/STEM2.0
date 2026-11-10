@@ -6,28 +6,29 @@
 
 const int PIN_SERVO = 23;
 
-// Tu frente real exacto
+// Tu centro físico real
 const int POS_FRENTE    = 85; 
-// Cobertura angular abierta para proteger las llantas en esquinas
-const int POS_DERECHA   = 15;  // 85 - 70 grados (visión total hacia la llanta derecha)
-const int POS_IZQUIERDA = 155; // 85 + 70 grados (visión total hacia la llanta izquierda)
+// 90 grados a cada lado respecto al centro
+const int POS_DERECHA   = 0;   // 85 - 85 grados (tope derecho real)
+const int POS_IZQUIERDA = 175; // 85 + 90 grados (tope izquierdo real)
 
 static Servo servoSensor;
 static int anguloActual = POS_FRENTE;
 
-inline void moverSuave(int anguloDestino) {
-  anguloDestino = constrain(anguloDestino, 10, 170);
+inline void moverRapido(int anguloDestino) {
+  anguloDestino = constrain(anguloDestino, 0, 180);
   if (anguloDestino == anguloActual) return;
 
-  int paso = (anguloDestino > anguloActual) ? 1 : -1;
-  
-  while (anguloActual != anguloDestino) {
+  int paso = (anguloDestino > anguloActual) ? 6 : -6;
+  while (abs(anguloDestino - anguloActual) > 6) {
     anguloActual += paso;
     servoSensor.write(anguloActual);
-    delay(12); // Movimiento suave
+    delay(4); // Movimiento ágil y continuo
   }
   
-  delay(120); // Asentamiento
+  anguloActual = anguloDestino;
+  servoSensor.write(anguloActual);
+  delay(90); // Asentamiento
 }
 
 inline void iniciarServo() {
@@ -38,25 +39,25 @@ inline void iniciarServo() {
   
   servoSensor.setPeriodHertz(50);
 
-  // Inicializar en 85° sin latigazo previo
   anguloActual = POS_FRENTE;
   servoSensor.write(POS_FRENTE);
-  servoSensor.attach(PIN_SERVO, 1000, 2000);
+  // Rango 500-2400 us para que el SG90 alcance los 180 grados reales
+  servoSensor.attach(PIN_SERVO, 500, 2400);
   servoSensor.write(POS_FRENTE);
   
-  delay(800);
+  delay(400);
 }
 
 inline void mirarCentro() {
-  moverSuave(POS_FRENTE);
+  moverRapido(POS_FRENTE);
 }
 
 inline void mirarDerecha() {
-  moverSuave(POS_DERECHA);
+  moverRapido(POS_DERECHA);
 }
 
 inline void mirarIzquierda() {
-  moverSuave(POS_IZQUIERDA);
+  moverRapido(POS_IZQUIERDA);
 }
 
 #endif
