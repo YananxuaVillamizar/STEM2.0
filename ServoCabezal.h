@@ -6,11 +6,10 @@
 
 const int PIN_SERVO = 23;
 
-// Tu centro físico real
-const int POS_FRENTE    = 85; 
-// 90 grados a cada lado respecto al centro
-const int POS_DERECHA   = 0;   // 85 - 85 grados (tope derecho real)
-const int POS_IZQUIERDA = 175; // 85 + 90 grados (tope izquierdo real)
+// Tu centro físico exacto compensado para el rango de 500-2400 us
+const int POS_FRENTE    = 92; 
+const int POS_DERECHA   = 0;   // 90 grados a la derecha
+const int POS_IZQUIERDA = 180; // 90 grados a la izquierda
 
 static Servo servoSensor;
 static int anguloActual = POS_FRENTE;
@@ -23,12 +22,12 @@ inline void moverRapido(int anguloDestino) {
   while (abs(anguloDestino - anguloActual) > 6) {
     anguloActual += paso;
     servoSensor.write(anguloActual);
-    delay(4); // Movimiento ágil y continuo
+    delay(4);
   }
   
   anguloActual = anguloDestino;
   servoSensor.write(anguloActual);
-  delay(90); // Asentamiento
+  delay(90);
 }
 
 inline void iniciarServo() {
@@ -41,7 +40,6 @@ inline void iniciarServo() {
 
   anguloActual = POS_FRENTE;
   servoSensor.write(POS_FRENTE);
-  // Rango 500-2400 us para que el SG90 alcance los 180 grados reales
   servoSensor.attach(PIN_SERVO, 500, 2400);
   servoSensor.write(POS_FRENTE);
   
