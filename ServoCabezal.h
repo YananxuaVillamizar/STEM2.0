@@ -6,10 +6,12 @@
 
 const int PIN_SERVO = 23;
 
-// Tu centro físico exacto compensado para el rango de 500-2400 us
-const int POS_FRENTE    = 92; 
-const int POS_DERECHA   = 0;   // 90 grados a la derecha
-const int POS_IZQUIERDA = 180; // 90 grados a la izquierda
+// Calibración angular con centro físico real (92°)
+const int POS_FRENTE       = 92; 
+const int POS_DIAG_DER     = 45;   // 45° Diagonal derecha
+const int POS_DERECHA      = 0;    // 0° Perpendicular derecha
+const int POS_DIAG_IZQ     = 138;  // 45° Diagonal izquierda
+const int POS_IZQUIERDA    = 180;  // 180° Perpendicular izquierda
 
 static Servo servoSensor;
 static int anguloActual = POS_FRENTE;
@@ -27,7 +29,7 @@ inline void moverRapido(int anguloDestino) {
   
   anguloActual = anguloDestino;
   servoSensor.write(anguloActual);
-  delay(90);
+  delay(85);
 }
 
 inline void iniciarServo() {
@@ -46,16 +48,10 @@ inline void iniciarServo() {
   delay(400);
 }
 
-inline void mirarCentro() {
-  moverRapido(POS_FRENTE);
-}
-
-inline void mirarDerecha() {
-  moverRapido(POS_DERECHA);
-}
-
-inline void mirarIzquierda() {
-  moverRapido(POS_IZQUIERDA);
-}
+inline void mirarCentro()      { moverRapido(POS_FRENTE); }
+inline void mirarDiagDerecha() { moverRapido(POS_DIAG_DER); }
+inline void mirarDerecha()     { moverRapido(POS_DERECHA); }
+inline void mirarDiagIzq()     { moverRapido(POS_DIAG_IZQ); }
+inline void mirarIzquierda()   { moverRapido(POS_IZQUIERDA); }
 
 #endif

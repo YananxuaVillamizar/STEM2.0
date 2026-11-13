@@ -6,7 +6,8 @@
 const int PIN_TRIG = 4;
 const int PIN_ECHO = 22;
 
-static float ultimaLecturaValida = 100.0;
+static float ultimaDistanciaValida = 100.0;
+static bool reboteEspecularDetectado = false;
 
 inline void iniciarUltrasonido() {
   pinMode(PIN_TRIG, OUTPUT);
@@ -21,34 +22,38 @@ inline float medirDistanciaCruda() {
   delayMicroseconds(10);
   digitalWrite(PIN_TRIG, LOW);
 
-  // Timeout de 20 ms (~3.4 metros max)
-  long duracion = pulseIn(PIN_ECHO, HIGH, 20000);
-
-  // Si no hay eco (0 us), puede ser camino libre (>3m) O zona ciega por choque pegado (<2cm)
+  long duracion = pulseIn(PIN_ECHO, HIGH, 22000); // ~3.7 metros
   if (duracion == 0) {
     return 400.0;
   }
   return (duracion * 0.0343) / 2.0;
 }
 
-// Filtro de confirmación: si una lectura detecta obstáculo, manda la menor
 inline float medirDistancia() {
   float d1 = medirDistanciaCruda();
-  delay(12);
+  delay(10);
   float d2 = medirDistanciaCruda();
+  float distMedida = min(d1, d2);
 
-  // Si una lectura detectó obstáculo cercano y la otra dio 400 (rebote perdido),
-  // se prioriza el obstáculo real para no chocar
-  float menor = min(d1, d2);
-  float mayor = max(d1, d2);
-
-  if (menor < 50.0 && mayor > 250.0) {
-    ultimaLecturaValida = menor;
-    return menor;
+  // DETECCIÓN DE REBOTE ESPECULAR EN DIAGONAL:
+  // Si estábamos a menos de 55 cm de algo y súbitamente la señal se pierde marcando >250 cm,
+  // la pared no desapareció: el haz rebotó hacia un lado en diagonal.
+  if (ultimaDistanciaValida < 55.0 && distMedida > 250.0) {
+    reboteEspecularDetectado = true;
+    // Forzamos una distancia crítica virtual para activar frenado preventivo
+    return ultimaDistanciaValida; 
+  } else {
+    reboteEspecularDetectado = false;
   }
 
-  ultimaLecturaValida = d1;
-  return d1;
+  if (distMedida < 300.0) {
+    ultimaDistanciaValida = distMedida;
+  }
+  return distMedida;
+}
+
+inline bool hayReboteEspecular() {
+  return reboteEspecularDetectado;
 }
 
 #endif

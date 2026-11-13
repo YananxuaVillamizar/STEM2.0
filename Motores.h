@@ -12,12 +12,12 @@ const int PIN_EN2 = 25;
 const int PIN_IN3 = 33;
 const int PIN_IN4 = 32;
 
-// Velocidades calibradas para potencia y estabilidad
+// Velocidades de operación
 const int VELOCIDAD_CRUCERO = 160; 
 const int VELOCIDAD_GIRO    = 155; 
 const int VELOCIDAD_RESCATE = 185;
 
-// Compensación de trayectoria recta
+// Calibración de línea recta
 const float TRIM_IZQ = 0.96; 
 const float TRIM_DER = 1.00;
 
@@ -40,20 +40,26 @@ inline void iniciarMotores() {
   frenar();
 }
 
-inline void avanzarConFuerza() {
+// Función requerida por RobotEvasor.ino
+inline void avanzarSuave() {
   digitalWrite(PIN_IN1, HIGH);
   digitalWrite(PIN_IN2, LOW);
   digitalWrite(PIN_IN3, HIGH);
   digitalWrite(PIN_IN4, LOW);
 
-  // Kick-Start: impulso breve de 50 ms a PWM alto para romper inercia estática del piso
-  analogWrite(PIN_EN1, (int)(185 * TRIM_IZQ));
-  analogWrite(PIN_EN2, (int)(185 * TRIM_DER));
-  delay(50);
+  // Impulso inicial breve (Kick-start) para romper la inercia del suelo y la caster
+  analogWrite(PIN_EN1, (int)(180 * TRIM_IZQ));
+  analogWrite(PIN_EN2, (int)(180 * TRIM_DER));
+  delay(40);
 
-  // Mantener velocidad de crucero constante
+  // Velocidad de crucero balanceada
   analogWrite(PIN_EN1, (int)(VELOCIDAD_CRUCERO * TRIM_IZQ));
   analogWrite(PIN_EN2, (int)(VELOCIDAD_CRUCERO * TRIM_DER));
+}
+
+// Alias de seguridad
+inline void avanzarConFuerza() {
+  avanzarSuave();
 }
 
 inline void retrocederConTorque(int duracionMs) {
